@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -28,7 +28,6 @@ class SegarRadiosApp extends StatelessWidget {
   }
 }
 
-// Splash Screen
 class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -58,7 +57,6 @@ class SplashScreen extends StatelessWidget {
   }
 }
 
-// Home Screen
 class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -92,7 +90,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Function to fetch and display radios from Firestore
   Widget buildRadioList() {
     return FutureBuilder<DatabaseEvent>(
       future: FirebaseDatabase.instance.ref('radio_stations').once(),
@@ -104,15 +101,12 @@ class _HomeScreenState extends State<HomeScreen> {
           return Center(child: Text('Error: ${snapshot.error}'));
         }
 
-        // Get the data from the DatabaseEvent
-        final stations =
-            snapshot.data!.snapshot.value as Map<dynamic, dynamic>?;
+        final stations = snapshot.data!.snapshot.value as Map<dynamic, dynamic>?;
 
         if (stations == null || stations.isEmpty) {
           return Center(child: Text('No radio stations found'));
         }
 
-        // Convert to a list
         final radios = stations.entries.map((entry) {
           final data = entry.value;
           return {
@@ -124,8 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return GridView.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2, // 2 tiles per row
-            childAspectRatio: 1, // Square tiles
+            crossAxisCount: 2,
+            childAspectRatio: 1,
           ),
           itemCount: radios.length,
           itemBuilder: (context, index) {
@@ -142,7 +136,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Search Functionality
 class RadioSearchDelegate extends SearchDelegate {
   @override
   List<Widget> buildActions(BuildContext context) {
@@ -177,18 +170,17 @@ class RadioSearchDelegate extends SearchDelegate {
   }
 }
 
-// Radio Tile Widget
+
 class RadioTile extends StatelessWidget {
   final String name;
   final String streamUrl;
   final String albumArt;
 
-  RadioTile(
-      {required this.name, required this.streamUrl, required this.albumArt});
+  RadioTile({required this.name, required this.streamUrl, required this.albumArt});
 
   @override
   Widget build(BuildContext context) {
-    final radioPlayer = Provider.of<RadioPlayer>(context, listen: false);
+    final radioPlayer = Provider.of<RadioPlayer>(context);
 
     return GestureDetector(
       onTap: () {
@@ -196,12 +188,19 @@ class RadioTile extends StatelessWidget {
       },
       child: Card(
         color: Colors.grey[900],
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            Image.network(albumArt, height: 80, width: 80, fit: BoxFit.cover),
-            SizedBox(height: 8),
-            Text(name, style: TextStyle(color: Colors.white)),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.network(albumArt, height: 80, width: 80, fit: BoxFit.cover),
+                SizedBox(height: 8),
+                Text(name, style: TextStyle(color: Colors.white)),
+              ],
+            ),
+            if (radioPlayer.currentRadio == name && radioPlayer.isBuffering)
+              CircularProgressIndicator(),
           ],
         ),
       ),
@@ -209,56 +208,85 @@ class RadioTile extends StatelessWidget {
   }
 }
 
-// Now Playing Bar
 class NowPlayingBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radioPlayer = Provider.of<RadioPlayer>(context);
-
-    if (!radioPlayer.isPlaying)
-      return Container(); // Hide if nothing is playing
 
     return Container(
       color: Colors.grey[850],
       padding: EdgeInsets.all(10),
       child: Row(
         children: [
-          Image.network(radioPlayer.albumArt,
-              height: 50, width: 50, fit: BoxFit.cover),
+          if (radioPlayer.isPlaying || radioPlayer.isBuffering)
+            Image.network(radioPlayer.albumArt,
+                height: 50, width: 50, fit: BoxFit.cover)
+          else
+            Icon(Icons.radio, size: 50, color: Colors.white54),
           SizedBox(width: 10),
-          Text(radioPlayer.currentRadio, style: TextStyle(color: Colors.white)),
-          Spacer(),
-          IconButton(
-            icon: Icon(Icons.stop, color: Colors.white),
-            onPressed: () {
-              radioPlayer.stopRadio();
-            },
+          Text(
+            radioPlayer.isPlaying || radioPlayer.isBuffering
+                ? radioPlayer.currentRadio
+                : "No station playing",
+            style: TextStyle(color: Colors.white),
           ),
+          Spacer(),
+          if (radioPlayer.isPlaying || radioPlayer.isBuffering)
+            IconButton(
+              icon: Icon(Icons.stop, color: Colors.white),
+              onPressed: () {
+                radioPlayer.stopRadio();
+              },
+            ),
         ],
       ),
     );
   }
 }
 
-// Radio Player Provider (handles audio streaming)
 class RadioPlayer extends ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
   String currentRadio = "";
   String albumArt = "";
   bool isPlaying = false;
+  bool isBuffering = false;
 
-  void playRadio(String name, String streamUrl, String albumArtUrl) {
+  void playRadio(String name, String streamUrl, String albumArtUrl) async {
+    print("Attempting to play: $streamUrl");
     currentRadio = name;
     albumArt = albumArtUrl;
-    _audioPlayer.play(UrlSource(streamUrl)); // Use UrlSource instead of String
+    isBuffering = true;
+    notifyListeners();
 
-    isPlaying = true;
+    try {
+      await _audioPlayer.setUrl(streamUrl);
+      await _audioPlayer.play();
+      _audioPlayer.playerStateStream.listen((playerState) {
+        final isPlaying = playerState.playing;
+        final processingState = playerState.processingState;
+        print("Player state: playing=$isPlaying, processingState=$processingState");
+        this.isPlaying = isPlaying && processingState == ProcessingState.ready;
+        this.isBuffering = processingState == ProcessingState.buffering;
+        notifyListeners();
+      });
+    } catch (e) {
+      print("Error playing stream: $e");
+      isPlaying = false;
+      isBuffering = false;
+    }
     notifyListeners();
   }
 
   void stopRadio() {
     _audioPlayer.stop();
     isPlaying = false;
+    isBuffering = false;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
   }
 }
