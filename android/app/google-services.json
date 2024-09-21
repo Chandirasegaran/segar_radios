@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "628620288554",
+    "project_id": "segar-radios",
+    "storage_bucket": "segar-radios.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:628620288554:android:600b180cab425fa6df1953",
+        "android_client_info": {
+          "package_name": "com.segar.segar_radios"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjBNN_wxpFcMli7UHLZgZwg7rppRja1MQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
