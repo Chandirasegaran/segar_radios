@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(SegarRadiosApp());
 }
 
@@ -91,15 +94,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Function to fetch and display radios from Firestore
   Widget buildRadioList() {
-    return StreamBuilder(
-      stream: FirebaseFirestore.instance.collection('radios').snapshots(),
-      builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+    return FutureBuilder<DatabaseEvent>(
+      future: FirebaseDatabase.instance.ref('radio_stations').once(),
+      builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
         }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
 
-        var radios = snapshot.data!.docs.where((doc) {
-          return (doc['name'] as String).toLowerCase().contains(searchQuery.toLowerCase());
+        // Get the data from the DatabaseEvent
+        final stations =
+            snapshot.data!.snapshot.value as Map<dynamic, dynamic>?;
+
+        if (stations == null || stations.isEmpty) {
+          return Center(child: Text('No radio stations found'));
+        }
+
+        // Convert to a list
+        final radios = stations.entries.map((entry) {
+          final data = entry.value;
+          return {
+            'station_name': data['station_name'],
+            'station_url': data['station_url'],
+            'album_art_url': data['album_art_url'],
+          };
         }).toList();
 
         return GridView.builder(
@@ -111,9 +131,9 @@ class _HomeScreenState extends State<HomeScreen> {
           itemBuilder: (context, index) {
             var radio = radios[index];
             return RadioTile(
-              name: radio['name'],
-              streamUrl: radio['streamUrl'],
-              albumArt: radio['albumArt'],
+              name: radio['station_name'],
+              streamUrl: radio['station_url'],
+              albumArt: radio['album_art_url'],
             );
           },
         );
@@ -163,7 +183,8 @@ class RadioTile extends StatelessWidget {
   final String streamUrl;
   final String albumArt;
 
-  RadioTile({required this.name, required this.streamUrl, required this.albumArt});
+  RadioTile(
+      {required this.name, required this.streamUrl, required this.albumArt});
 
   @override
   Widget build(BuildContext context) {
@@ -194,14 +215,16 @@ class NowPlayingBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final radioPlayer = Provider.of<RadioPlayer>(context);
 
-    if (!radioPlayer.isPlaying) return Container(); // Hide if nothing is playing
+    if (!radioPlayer.isPlaying)
+      return Container(); // Hide if nothing is playing
 
     return Container(
       color: Colors.grey[850],
       padding: EdgeInsets.all(10),
       child: Row(
         children: [
-          Image.network(radioPlayer.albumArt, height: 50, width: 50, fit: BoxFit.cover),
+          Image.network(radioPlayer.albumArt,
+              height: 50, width: 50, fit: BoxFit.cover),
           SizedBox(width: 10),
           Text(radioPlayer.currentRadio, style: TextStyle(color: Colors.white)),
           Spacer(),
@@ -227,7 +250,8 @@ class RadioPlayer extends ChangeNotifier {
   void playRadio(String name, String streamUrl, String albumArtUrl) {
     currentRadio = name;
     albumArt = albumArtUrl;
-    _audioPlayer.play(streamUrl);
+    _audioPlayer.play(UrlSource(streamUrl)); // Use UrlSource instead of String
+
     isPlaying = true;
     notifyListeners();
   }
