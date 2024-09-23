@@ -63,7 +63,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String searchQuery = "";
+  List<Map<String, String>> radios = [];
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +75,10 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: Icon(Icons.search),
             onPressed: () {
-              showSearch(context: context, delegate: RadioSearchDelegate());
+              showSearch(
+                context: context,
+                delegate: RadioSearchDelegate(radios),
+              );
             },
           ),
         ],
@@ -107,14 +110,14 @@ class _HomeScreenState extends State<HomeScreen> {
           return Center(child: Text('No radio stations found'));
         }
 
-        final radios = stations.entries.map((entry) {
-          final data = entry.value;
+        radios = stations.entries.map((entry) {
+          final data = entry.value as Map<dynamic, dynamic>;
           return {
-            'station_name': data['station_name'],
-            'station_url': data['station_url'],
-            'album_art_url': data['album_art_url'],
+            'station_name': data['station_name'] as String,
+            'station_url': data['station_url'] as String,
+            'album_art_url': data['album_art_url'] as String,
           };
-        }).toList();
+        }).toList().cast<Map<String, String>>();
 
         return GridView.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -125,9 +128,9 @@ class _HomeScreenState extends State<HomeScreen> {
           itemBuilder: (context, index) {
             var radio = radios[index];
             return RadioTile(
-              name: radio['station_name'],
-              streamUrl: radio['station_url'],
-              albumArt: radio['album_art_url'],
+              name: radio['station_name']!,
+              streamUrl: radio['station_url']!,
+              albumArt: radio['album_art_url']!,
             );
           },
         );
@@ -137,6 +140,10 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class RadioSearchDelegate extends SearchDelegate {
+  final List<Map<String, String>> radioStations;
+
+  RadioSearchDelegate(this.radioStations);
+
   @override
   List<Widget> buildActions(BuildContext context) {
     return [
@@ -161,15 +168,38 @@ class RadioSearchDelegate extends SearchDelegate {
 
   @override
   Widget buildResults(BuildContext context) {
-    return Text("Search results for '$query'");
+    final results = radioStations
+        .where((station) =>
+        station['station_name']!.toLowerCase().contains(query.toLowerCase()))
+        .toList();
+
+    return results.isEmpty
+        ? Center(child: Text("No results found"))
+        : GridView.builder(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 1,
+      ),
+      itemCount: results.length,
+      itemBuilder: (context, index) {
+        var radio = results[index];
+        return RadioTile(
+          name: radio['station_name']!,
+          streamUrl: radio['station_url']!,
+          albumArt: radio['album_art_url']!,
+        );
+      },
+    );
   }
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    return Text("Search for radios");
+    return Container(
+      padding: EdgeInsets.all(20),
+      child: Text("Search radio stations by name"),
+    );
   }
 }
-
 
 class RadioTile extends StatelessWidget {
   final String name;
@@ -260,15 +290,21 @@ class RadioPlayer extends ChangeNotifier {
 
     try {
       await _audioPlayer.setUrl(streamUrl);
-      await _audioPlayer.play();
       _audioPlayer.playerStateStream.listen((playerState) {
         final isPlaying = playerState.playing;
         final processingState = playerState.processingState;
-        print("Player state: playing=$isPlaying, processingState=$processingState");
+
         this.isPlaying = isPlaying && processingState == ProcessingState.ready;
         this.isBuffering = processingState == ProcessingState.buffering;
+
+        // Stop buffering when the stream is ready
+        if (processingState == ProcessingState.ready) {
+          isBuffering = false;
+        }
+
         notifyListeners();
       });
+      await _audioPlayer.play();
     } catch (e) {
       print("Error playing stream: $e");
       isPlaying = false;
