@@ -28,6 +28,7 @@ class SegarRadiosApp extends StatelessWidget {
   }
 }
 
+// Splash screen that displays for 3 seconds
 class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -57,6 +58,7 @@ class SplashScreen extends StatelessWidget {
   }
 }
 
+// Home screen displaying the radio stations
 class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -93,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Fetch radio stations from Firebase and build the list
   Widget buildRadioList() {
     return FutureBuilder<DatabaseEvent>(
       future: FirebaseDatabase.instance.ref('radio_stations').once(),
@@ -139,6 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// Search delegate for radio stations
 class RadioSearchDelegate extends SearchDelegate {
   final List<Map<String, String>> radioStations;
 
@@ -194,19 +198,24 @@ class RadioSearchDelegate extends SearchDelegate {
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    return Container(
+    return Padding(
       padding: EdgeInsets.all(20),
       child: Text("Search radio stations by name"),
     );
   }
 }
 
+// Widget representing each radio station tile
 class RadioTile extends StatelessWidget {
   final String name;
   final String streamUrl;
   final String albumArt;
 
-  RadioTile({required this.name, required this.streamUrl, required this.albumArt});
+  RadioTile({
+    required this.name,
+    required this.streamUrl,
+    required this.albumArt,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -229,6 +238,7 @@ class RadioTile extends StatelessWidget {
                 Text(name, style: TextStyle(color: Colors.white)),
               ],
             ),
+            // Show buffering indicator if applicable
             if (radioPlayer.currentRadio == name && radioPlayer.isBuffering)
               CircularProgressIndicator(),
           ],
@@ -238,6 +248,7 @@ class RadioTile extends StatelessWidget {
   }
 }
 
+// Now playing bar that displays the current station and playback controls
 class NowPlayingBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -248,12 +259,13 @@ class NowPlayingBar extends StatelessWidget {
       padding: EdgeInsets.all(10),
       child: Row(
         children: [
+          // Display album art or default icon
           if (radioPlayer.isPlaying || radioPlayer.isBuffering)
-            Image.network(radioPlayer.albumArt,
-                height: 50, width: 50, fit: BoxFit.cover)
+            Image.network(radioPlayer.albumArt, height: 50, width: 50, fit: BoxFit.cover)
           else
             Icon(Icons.radio, size: 50, color: Colors.white54),
           SizedBox(width: 10),
+          // Display current station name or message
           Text(
             radioPlayer.isPlaying || radioPlayer.isBuffering
                 ? radioPlayer.currentRadio
@@ -261,6 +273,7 @@ class NowPlayingBar extends StatelessWidget {
             style: TextStyle(color: Colors.white),
           ),
           Spacer(),
+          // Stop button
           if (radioPlayer.isPlaying || radioPlayer.isBuffering)
             IconButton(
               icon: Icon(Icons.stop, color: Colors.white),
@@ -274,6 +287,7 @@ class NowPlayingBar extends StatelessWidget {
   }
 }
 
+// Radio player logic and state management
 class RadioPlayer extends ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
   String currentRadio = "";
@@ -281,6 +295,7 @@ class RadioPlayer extends ChangeNotifier {
   bool isPlaying = false;
   bool isBuffering = false;
 
+  // Play selected radio station
   void playRadio(String name, String streamUrl, String albumArtUrl) async {
     print("Attempting to play: $streamUrl");
     currentRadio = name;
@@ -313,6 +328,7 @@ class RadioPlayer extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Stop playback
   void stopRadio() {
     _audioPlayer.stop();
     isPlaying = false;
